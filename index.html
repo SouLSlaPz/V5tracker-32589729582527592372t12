@@ -320,14 +320,7 @@
             // --- CONSTANTS ---
             const MASTER_KEY = "01512899027";
             const PIN_DOC_PATH = "settings/pin";
-           const firebaseConfig = {
-  apiKey: "AIzaSyBIlEbTnEzkcXJs0sRKOGx0xA5AWOWZdb4",
-  authDomain: "tracker2026-330ca.firebaseapp.com",
-  projectId: "tracker2026-330ca",
-  storageBucket: "tracker2026-330ca.firebasestorage.app",
-  messagingSenderId: "810324319247",
-  appId: "1:810324319247:web:97ea4879073fc4f619577a"
-};
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "AIzaSyBIlEbTnEzkcXJs0sRKOGx0xA5AWOWZdb4", authDomain: "tracker2026-330ca.firebaseapp.com", projectId: "tracker2026-330ca", storageBucket: "tracker2026-330ca.firebasestorage.app", messagingSenderId: "810324319247", appId: "1:810324319247:web:97ea4879073fc4f619577a" };
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-ecosystem';
             
             // --- STATE ---
@@ -584,7 +577,7 @@
             score = 0.00; wins = 0; losses = 0; totalTrades = 0; maxWin = 0; maxLoss = 0; history = [];
             updateDisplay(prev);
             if (isAppUnlocked) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'appA_autosave', 'current'));
-            showView('main-view'); // Fix: Close view on reset
+            showView('main-view'); 
         };
 
         const calculateState = (value) => {
@@ -766,25 +759,19 @@
         // 2. Main Calc Actions
         document.getElementById('undo-btn').onclick = async () => { if (history.length) { const last = history.pop(); const prevScore = score; score = last.state.score; wins = last.state.wins; losses = last.state.losses; totalTrades = last.state.totalTrades; updateDisplay(prevScore); await autoSaveSession(); } };
         document.getElementById('reset-btn').onclick = () => showView('reset-view');
-        document.getElementById('confirm-reset-btn').onclick = async () => { await resetCalculator(); }; // Fixed: Calls the updated function with showView
+        document.getElementById('confirm-reset-btn').onclick = async () => { await resetCalculator(); }; 
         
         // 3. Template & Model Actions
-        document.getElementById('open-manage-models-btn').onclick = () => showView('manage-models-view'); // Fixed: Add Model button
+        document.getElementById('open-manage-models-btn').onclick = () => showView('manage-models-view'); 
         document.getElementById('edit-templates-btn').onclick = () => {
-             // Reset inputs logic inline for simplicity
-            document.getElementById('template-edit-selector').value = "";
-            document.getElementById('template-name-input').value = "";
-            document.getElementById('instrument-input').value = "ES";
-            document.getElementById('point-value-input').value = "50";
-            document.getElementById('commission-input').value = "1.24";
-            document.getElementById('positive-buttons-input').value = "";
-            document.getElementById('negative-buttons-input').value = "";
-            
-            const chk = document.getElementById('open-mode-checkbox');
-            chk.checked = false;
-            document.getElementById('standard-inputs').classList.remove('hidden');
-            document.getElementById('open-mode-inputs').classList.add('hidden');
-            document.getElementById('delete-template-btn').classList.add('hidden');
+            const tmplSelector = document.getElementById('template-selector');
+            const editSelector = document.getElementById('template-edit-selector');
+            if (tmplSelector.value && editSelector.querySelector(`option[value="${tmplSelector.value}"]`)) {
+                editSelector.value = tmplSelector.value;
+                // Manually trigger change to populate form
+                const event = new Event('change');
+                editSelector.dispatchEvent(event);
+            }
             showView('edit-templates-view');
         };
         
@@ -903,9 +890,61 @@
             const tmpl = templates[document.getElementById('template-selector').value];
             const profit = (score * tmpl.pointValue) - (totalTrades * tmpl.commission);
             document.getElementById('preview-pl').textContent = `$${profit.toFixed(2)}`;
+            
+            // Check default setting and initialize UI correctly
+            const timeSelect = document.getElementById('session-time-selector');
+            const isCustom = timeSelect.value === 'Custom';
+            
+            const customInputs = document.getElementById('custom-time-inputs');
+            if (isCustom) {
+                customInputs.classList.remove('hidden');
+                customInputs.classList.add('grid');
+                
+                // Pre-fill time if empty
+                const startInput = document.getElementById('start-time');
+                const endInput = document.getElementById('end-time');
+                if (!startInput.value || !endInput.value) {
+                     const now = new Date();
+                     const oneHourAgo = new Date(now.getTime() - 3600000);
+                     const format = d => d.toTimeString().substring(0, 5);
+                     startInput.value = format(oneHourAgo);
+                     endInput.value = format(now);
+                }
+            } else {
+                customInputs.classList.add('hidden');
+                customInputs.classList.remove('grid');
+            }
+            
             showView('save-view');
         };
         
+        // CUSTOM TIME SELECTOR LOGIC (FIXED)
+        const timeSelector = document.getElementById('session-time-selector');
+        timeSelector.addEventListener('change', (e) => {
+            const isCustom = e.target.value === 'Custom';
+            const inputs = document.getElementById('custom-time-inputs');
+            
+            if (isCustom) {
+                inputs.classList.remove('hidden');
+                inputs.classList.add('grid'); // Ensure grid layout applied
+                
+                // Pre-fill time for convenience
+                const now = new Date();
+                const oneHourAgo = new Date(now.getTime() - 3600000);
+                const format = d => d.toTimeString().substring(0, 5);
+                
+                const startInput = document.getElementById('start-time');
+                const endInput = document.getElementById('end-time');
+                
+                if (!startInput.value) startInput.value = format(oneHourAgo);
+                if (!endInput.value) endInput.value = format(now);
+                
+            } else {
+                inputs.classList.add('hidden');
+                inputs.classList.remove('grid');
+            }
+        });
+
         document.getElementById('confirm-save-btn').onclick = async () => {
             const model = document.getElementById('save-model-selector').value;
             const date = document.getElementById('save-date').value;
