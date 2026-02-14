@@ -123,7 +123,7 @@
         .open-mode-container { display: flex; height: 100%; width: 100%; justify-content: space-between; align-items: center; position: relative; touch-action: none; }
         .open-mode-container.hidden { display: none !important; }
         .dial-track-container { width: 80px; height: 260px; position: relative; display: flex; justify-content: center; border-radius: 999px; background: var(--input-bg); border: 1px solid var(--border-main); overflow: visible; }
-        .dial-handle { width: 60px; height: 60px; border-radius: 50%; background: var(--text-main); position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--bg-main); font-size: 1.2rem; pointer-events: none; z-index: 10; transition: bottom 0.05s linear; }
+        .dial-handle { width: 60px; height: 60px; border-radius: 50%; background: var(--text-main); position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--bg-main); font-size: 1.2rem; pointer-events: none; z-index: 10; transition: bottom 0.05s linear; will-change: bottom; }
         .dial-value-display { position: absolute; top: -50px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; font-weight: 800; opacity: 0; transition: opacity 0.2s; font-family: 'IBM Plex Mono', monospace; color: var(--text-main); }
         .dial-track-container.active .dial-value-display { opacity: 1; }
         .center-zero-btn { width: 80px; height: 80px; border-radius: 50%; background: var(--input-bg); border: 2px solid var(--border-main); color: var(--text-main); font-size: 1.8rem; font-weight: bold; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 20; cursor: pointer;}
@@ -320,7 +320,14 @@
             // --- CONSTANTS ---
             const MASTER_KEY = "01512899027";
             const PIN_DOC_PATH = "settings/pin";
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "AIzaSyBIlEbTnEzkcXJs0sRKOGx0xA5AWOWZdb4", authDomain: "tracker2026-330ca.firebaseapp.com", projectId: "tracker2026-330ca", storageBucket: "tracker2026-330ca.firebasestorage.app", messagingSenderId: "810324319247", appId: "1:810324319247:web:97ea4879073fc4f619577a" };
+            const firebaseConfig = {
+  apiKey: "AIzaSyBIlEbTnEzkcXJs0sRKOGx0xA5AWOWZdb4",
+  authDomain: "tracker2026-330ca.firebaseapp.com",
+  projectId: "tracker2026-330ca",
+  storageBucket: "tracker2026-330ca.firebasestorage.app",
+  messagingSenderId: "810324319247",
+  appId: "1:810324319247:web:97ea4879073fc4f619577a"
+};
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-ecosystem';
             
             // --- STATE ---
@@ -485,8 +492,10 @@
                 const effectiveHeight = trackHeight - handleHeight - 20; 
                 let isDragging = false, currentValue = 0;
                 
+                const getClientY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
+
                 const updateVisuals = (clientY) => {
-                    const rect = dialEl.getBoundingClientRect();
+                    const rect = dialEl.getBoundingClientRect(); // Cached in production for performance but ok for now
                     let relativeY = rect.bottom - clientY - (handleHeight/2) - 10; 
                     relativeY = Math.max(0, Math.min(relativeY, effectiveHeight));
                     const ratio = relativeY / effectiveHeight;
@@ -495,13 +504,42 @@
                     if(Math.abs(snapped) > Math.abs(maxVal)) snapped = Math.abs(maxVal);
                     if(!isPositive) snapped = -snapped;
                     currentValue = snapped;
-                    handle.style.bottom = `${10 + (ratio * effectiveHeight)}px`;
-                    display.textContent = (currentValue > 0 ? '+' : '') + currentValue.toFixed(2);
+                    
+                    // Optimization: Use requestAnimationFrame for smoother UI updates
+                    requestAnimationFrame(() => {
+                         handle.style.bottom = `${10 + (ratio * effectiveHeight)}px`;
+                         display.textContent = (currentValue > 0 ? '+' : '') + currentValue.toFixed(2);
+                    });
+                    
                     dialEl.classList.add('active');
                 };
-                const startDrag = (e) => { isDragging = true; updateVisuals(e.touches ? e.touches[0].clientY : e.clientY); };
-                const moveDrag = (e) => { if(!isDragging) return; updateVisuals(e.touches ? e.touches[0].clientY : e.clientY); };
-                const endDrag = (e) => { if(!isDragging) return; isDragging = false; dialEl.classList.remove('active'); if(currentValue !== 0) handleButtonClick(e, currentValue); handle.style.bottom = '10px'; display.textContent = "0.00"; };
+                
+                const startDrag = (e) => { 
+                    isDragging = true; 
+                    // Prevent default to stop scrolling/pull-to-refresh on mobile
+                    if(e.cancelable) e.preventDefault(); 
+                    updateVisuals(getClientY(e)); 
+                };
+                
+                const moveDrag = (e) => { 
+                    if(!isDragging) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    updateVisuals(getClientY(e)); 
+                };
+                
+                const endDrag = (e) => { 
+                    if(!isDragging) return; 
+                    isDragging = false; 
+                    dialEl.classList.remove('active'); 
+                    if(currentValue !== 0) handleButtonClick(e, currentValue); 
+                    
+                    requestAnimationFrame(() => {
+                        handle.style.bottom = '10px'; 
+                        display.textContent = "0.00"; 
+                    });
+                };
+                
+                // Add passive: false to allow preventDefault()
                 dialEl.addEventListener('touchstart', startDrag, {passive: false});
                 window.addEventListener('touchmove', moveDrag, {passive: false});
                 window.addEventListener('touchend', endDrag);
@@ -510,6 +548,7 @@
                 window.addEventListener('mouseup', endDrag);
             };
             
+            // Clone nodes to remove old listeners
             const newPos = posDial.cloneNode(true); const newNeg = negDial.cloneNode(true);
             posDial.parentNode.replaceChild(newPos, posDial); negDial.parentNode.replaceChild(newNeg, negDial);
             handleDialInteraction(newPos, true, maxPos); handleDialInteraction(newNeg, false, maxNeg);
@@ -534,7 +573,8 @@
                 const allButtons = [...(template.positive || []).sort((a, b) => a - b), 0, ...(template.negative || []).sort((a, b) => b - a)];
                 allButtons.forEach(val => {
                     const btn = document.createElement('button');
-                    btn.textContent = (val > 0 ? '+' : '') + (parseFloat(val) === parseInt(val) ? val : val.toFixed(1));
+                    // FEATURE REQUEST: 2 decimal places ONLY if entered
+                    btn.textContent = (val > 0 ? '+' : '') + Number(parseFloat(val).toFixed(2));
                     btn.className = `calc-btn ${val > 0 ? 'btn-positive' : val < 0 ? 'btn-negative-calc' : 'btn-neutral-calc'}`;
                     btn.onclick = (e) => handleButtonClick(e, val);
                     btnContainer.appendChild(btn);
