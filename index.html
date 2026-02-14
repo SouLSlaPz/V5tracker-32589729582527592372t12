@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading P/L Feeder (App A)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&family=Exo+2:wght@400;700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;700&family=Lato:wght@400;700&family=Poppins:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- Base Styles --- */
+        html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; }
+        body { font-family: 'Lato', 'Poppins', sans-serif; transition: background-color 0.3s ease, color 0.3s ease; }
+        *, *::before, *::after { box-sizing: border-box; }
+        .app-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+        .main-container { width: 100%; max-width: 420px; margin: auto; display: flex; flex-direction: column; border-radius: 1.5rem; overflow: hidden; height: 95vh; max-height: 900px; transition: background-color 0.3s ease, border 0.3s ease, box-shadow 0.4s ease; position: relative; }
+        .calc-btn { width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700; border-radius: 1.25rem; box-shadow: 0 4px 15px -1px rgba(0,0,0,0.1); transition: all 0.15s ease-in-out; border: 2px solid transparent; cursor: pointer; position: relative; overflow: hidden; }
+        .calc-btn:active { transform: scale(0.96); box-shadow: 0 2px 5px -1px rgba(0,0,0,0.1); }
+        .btn { @apply font-bold rounded-lg shadow-md transition-transform transform hover:scale-105 active:scale-95; }
+        
+        /* --- PIN Screen --- */
+        #pin-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0f172a; color: white; transition: opacity 0.5s ease; }
+        #pin-overlay.hidden { opacity: 0; pointer-events: none; }
+        .pin-input { font-size: 2rem; letter-spacing: 0.5rem; text-align: center; width: 200px; background: transparent; border: none; border-bottom: 2px solid #3b82f6; color: white; outline: none; margin-bottom: 2rem; }
+        .pin-input:disabled { border-bottom: 2px solid #4b5563; color: #6b7280; }
+
+        /* --- View Switcher Styles --- */
+        .view { display: none; flex-direction: column; height: 100%; padding: 1.5rem; animation: fadeIn 0.3s ease-in-out; overflow-y: auto; }
+        .view.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .icon-btn { @apply p-1 transition-colors duration-200; }
+        .stats-label { @apply text-sm font-medium; }
+        .stats-value { @apply text-lg font-semibold; }
+        .form-input { @apply w-full rounded-md p-2 mt-1; }
+
+        /* --- Data Ring Styles --- */
+        .data-ring-container { position: relative; width: 80px; height: 80px; cursor: pointer; }
+        .data-ring-svg { transform: rotate(-90deg); width: 100%; height: 100%; transition: opacity 0.2s ease-in-out; }
+        .data-ring-circle { transition: stroke-dashoffset 0.5s ease-out; }
+        .data-ring-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+        .data-ring-text .value { font-size: 1.75rem; font-weight: 700; line-height: 1; }
+        .data-ring-details { display: none; }
+        .data-ring-container.show-details .data-ring-total { display: none; }
+        .data-ring-container.show-details .data-ring-details { display: flex; }
+        .data-ring-container.show-details .data-ring-svg { opacity: 0.2; }
+        .data-ring-details .profit-value { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
+        .data-ring-details .wl-value { font-size: 0.8rem; font-weight: 500; }
+
+        /* --- Theme Card Styles --- */
+        .theme-card { position: relative; cursor: pointer; border-radius: 1rem; padding: 1rem; transition: all 0.2s ease-in-out; border: 2px solid; display: flex; flex-direction: column; gap: 0.75rem; }
+        .theme-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px -4px rgba(0,0,0,0.1); }
+        .theme-card.selected { border-color: var(--selected-theme-border-color, #3b82f6); box-shadow: 0 0 0 3px var(--selected-theme-shadow-color, rgba(59, 130, 246, 0.4)); }
+        .theme-card-header { display: flex; justify-content: space-between; align-items: center; }
+        .theme-name-new { font-weight: 600; font-size: 1rem; }
+        .theme-swatches { display: flex; gap: 0.5rem; margin-top: auto; }
+        .swatch { width: 1.5rem; height: 1.5rem; border-radius: 9999px; border: 2px solid rgba(128, 128, 128, 0.3); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .checkmark-icon { position: absolute; top: 0.75rem; right: 0.75rem; width: 1.5rem; height: 1.5rem; background-color: var(--selected-theme-border-color, #3b82f6); color: white; border-radius: 9999px; display: none; align-items: center; justify-content: center; }
+        .theme-card.selected .checkmark-icon { display: flex; }
+
+        /* --- OPEN MODE STYLES --- */
+        .open-mode-container { display: flex; height: 100%; width: 100%; justify-content: space-between; align-items: center; position: relative; touch-action: none; }
+        /* Fix: Force hide when class is present to override display:flex */
+        .open-mode-container.hidden { display: none !important; }
+        
+        .dial-track-container { width: 80px; height: 280px; position: relative; display: flex; justify-content: center; border-radius: 999px; background: rgba(0,0,0,0.2); overflow: visible; }
+        .dial-handle { width: 60px; height: 60px; border-radius: 50%; background: white; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; pointer-events: none; z-index: 10; transition: bottom 0.05s linear; }
+        .dial-value-display { position: absolute; top: -40px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; font-weight: bold; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
+        .dial-track-container.active .dial-value-display { opacity: 1; }
+        .center-zero-btn { width: 80px; height: 80px; border-radius: 50%; background: white; color: black; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 20; }
+
+        /* --- Animations --- */
+        @keyframes radiate-flash { from { transform: translate(-50%, -50%) scale(0); opacity: 0.6; } to { transform: translate(-50%, -50%) scale(2.5); opacity: 0; } }
+        .main-container.flash-anim::after { content: ''; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; border-radius: 50%; background: var(--anim-color, transparent); transform: translate(-50%, -50%) scale(0); opacity: 0; pointer-events: none; animation: radiate-flash 0.7s ease-out forwards; }
+        @keyframes border-pulse { 0% { box-shadow: 0 0 0 0 var(--anim-color-transparent); } 50% { box-shadow: 0 0 20px 5px var(--anim-color); } 100% { box-shadow: 0 0 0 0 var(--anim-color-transparent); } }
+        .main-container.border-pulse-anim { animation: border-pulse 0.8s ease-in-out; }
+        @keyframes score-pulse { 50% { transform: scale(1.1); text-shadow: 0 0 25px var(--anim-color, #fff); } }
+        .score-pulse-anim { animation: score-pulse 0.5s ease-out; }
+
+        /* --- Themes (Reduced List) --- */
+        
+        /* Sunrise Theme */
+        .sunrise-theme { background: linear-gradient(to top, #D8B4FE, #FDE68A); color: #422006; font-family: 'Lato', sans-serif; }
+        .sunrise-theme .main-container { background-color: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .sunrise-theme .header-text, .sunrise-theme .score-text { color: #422006; }
+        .sunrise-theme .sub-text { color: #78350F; }
+        .sunrise-theme .btn-positive { background-color: #F97316; color: white; }
+        .sunrise-theme .btn-positive:hover { background-color: #EA580C; }
+        .sunrise-theme .btn-negative { background-color: #581C87; color: white; }
+        .sunrise-theme .btn-negative:hover { background-color: #4C1D95; }
+        .sunrise-theme .btn-neutral { background-color: #854D0E; color: white; }
+        .sunrise-theme .btn-neutral:hover { background-color: #78350F; }
+        .sunrise-theme .btn-secondary, .sunrise-theme .btn-action, .sunrise-theme .dropdown, .sunrise-theme .history-item { background-color: rgba(255, 255, 255, 0.4); border-color: rgba(133, 77, 14, 0.2); color: #422006; }
+        .sunrise-theme .btn-action { background-color: #854D0E; color: white; }
+        .sunrise-theme .btn-action:hover { background-color: #78350F; }
+        .sunrise-theme .stats-value.positive, .sunrise-theme .profit-positive { color: #F97316; }
+        .sunrise-theme .stats-value.negative, .sunrise-theme .profit-negative { color: #581C87; }
+        .sunrise-theme .icon-btn { color: #78350F; }
+        .sunrise-theme .icon-btn:hover { color: #422006; }
+        .sunrise-theme .score-glow-positive { text-shadow: 0 0 15px rgba(249, 115, 22, 0.5); }
+        .sunrise-theme .score-glow-negative { text-shadow: 0 0 15px rgba(88, 28, 135, 0.5); }
+        .sunrise-theme .form-input { background-color: rgba(255, 255, 255, 0.5); border: 1px solid rgba(133, 77, 14, 0.3); color: #422006; }
+        .sunrise-theme .form-input::placeholder { color: #854D0E; }
+        .sunrise-theme .ring-track { stroke: rgba(133, 77, 14, 0.2); }
+        .sunrise-theme .ring-wins { stroke: #F97316; }
+        .sunrise-theme .ring-losses { stroke: #581C87; }
+        .sunrise-theme .data-ring-text { color: #422006; }
+        .sunrise-theme .stats-card { background-color: rgba(255, 255, 255, 0.5); }
+
+        /* Iridescent Theme */
+        .iridescent-theme { background: linear-gradient(45deg, #a7f3d0, #bae6fd, #fbcfe8, #fef08a); color: #581c87; font-family: 'Poppins', sans-serif; }
+        .iridescent-theme .main-container { background-color: rgba(255, 255, 255, 0.5); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.8); }
+        .iridescent-theme .header-text, .iridescent-theme .score-text { color: #581c87; }
+        .iridescent-theme .sub-text { color: #0f766e; }
+        .iridescent-theme .btn-positive { background-color: rgba(167, 243, 208, 0.7); color: #064e3b; border-color: #a7f3d0; }
+        .iridescent-theme .btn-positive:hover { background-color: rgba(167, 243, 208, 1); }
+        .iridescent-theme .btn-negative { background-color: rgba(251, 207, 232, 0.7); color: #831843; border-color: #fbcfe8; }
+        .iridescent-theme .btn-negative:hover { background-color: rgba(251, 207, 232, 1); }
+        .iridescent-theme .btn-neutral { background-color: rgba(216, 180, 254, 0.7); color: #581c87; border-color: #d8b4fe; }
+        .iridescent-theme .btn-neutral:hover { background-color: rgba(216, 180, 254, 1); }
+        .iridescent-theme .btn-secondary, .iridescent-theme .btn-action, .iridescent-theme .dropdown, .iridescent-theme .history-item { background-color: rgba(255, 255, 255, 0.4); border-color: rgba(15, 118, 110, 0.2); color: #0f766e; }
+        .iridescent-theme .btn-action { background-color: rgba(216, 180, 254, 0.8); color: #581c87; }
+        .iridescent-theme .btn-action:hover { background-color: rgba(216, 180, 254, 1); }
+        .iridescent-theme .stats-value.positive, .iridescent-theme .profit-positive { color: #065f46; }
+        .iridescent-theme .stats-value.negative, .iridescent-theme .profit-negative { color: #9d174d; }
+        .iridescent-theme .icon-btn { color: #0f766e; }
+        .iridescent-theme .icon-btn:hover { color: #581c87; }
+        .iridescent-theme .score-glow-positive { text-shadow: 0 0 10px rgba(52, 211, 153, 0.7); }
+        .iridescent-theme .score-glow-negative { text-shadow: 0 0 10px rgba(251, 146, 198, 0.7); }
+        .iridescent-theme .form-input { background-color: rgba(255, 255, 255, 0.5); border: 1px solid rgba(15, 118, 110, 0.3); color: #581c87; }
+        .iridescent-theme .form-input::placeholder { color: #115e59; }
+        .iridescent-theme .ring-track { stroke: rgba(15, 118, 110, 0.2); }
+        .iridescent-theme .ring-wins { stroke: #a7f3d0; }
+        .iridescent-theme .ring-losses { stroke: #fbcfe8; }
+        .iridescent-theme .data-ring-text { color: #581c87; }
+        .iridescent-theme .stats-card { background-color: rgba(255, 255, 255, 0.5); }
+        
+        /* Nebula Theme */
+        .nebula-theme { background: linear-gradient(45deg, #1E1B4B, #86198F, #134E4A); color: #F0F9FF; font-family: 'Exo 2', sans-serif; }
+        .nebula-theme .main-container { background-color: rgba(10, 10, 20, 0.5); backdrop-filter: blur(12px); border: 2px solid #A855F7; }
+        .nebula-theme .header-text, .nebula-theme .score-text { color: #F0F9FF; }
+        .nebula-theme .sub-text { color: #A855F7; }
+        .nebula-theme .btn-positive { background-color: #14B8A6; color: #F0F9FF; }
+        .nebula-theme .btn-positive:hover { background-color: #0D9488; }
+        .nebula-theme .btn-negative { background-color: #D946EF; color: #F0F9FF; }
+        .nebula-theme .btn-negative:hover { background-color: #C026D3; }
+        .nebula-theme .btn-neutral { background-color: #6366F1; color: #F0F9FF; }
+        .nebula-theme .btn-neutral:hover { background-color: #4F46E5; }
+        .nebula-theme .btn-secondary, .nebula-theme .btn-action, .nebula-theme .dropdown, .nebula-theme .history-item { background-color: rgba(10, 10, 20, 0.7); border-color: rgba(168, 85, 247, 0.5); color: #F0F9FF; }
+        .nebula-theme .btn-action { background-color: #6366F1; color: #F0F9FF; }
+        .nebula-theme .btn-action:hover { background-color: #4F46E5; }
+        .nebula-theme .stats-value.positive, .nebula-theme .profit-positive { color: #14B8A6; }
+        .nebula-theme .stats-value.negative, .nebula-theme .profit-negative { color: #D946EF; }
+        .nebula-theme .icon-btn { color: #A855F7; }
+        .nebula-theme .icon-btn:hover { color: #F0F9FF; }
+        .nebula-theme .score-glow-positive { text-shadow: 0 0 10px #14B8A6; }
+        .nebula-theme .score-glow-negative { text-shadow: 0 0 10px #D946EF; }
+        .nebula-theme .form-input { background-color: rgba(10, 10, 20, 0.7); border: 1px solid #A855F7; color: #F0F9FF; }
+        .nebula-theme .form-input::placeholder { color: #A855F7; }
+        .nebula-theme .ring-track { stroke: rgba(168, 85, 247, 0.3); }
+        .nebula-theme .ring-wins { stroke: #14B8A6; }
+        .nebula-theme .ring-losses { stroke: #D946EF; }
+        .nebula-theme .data-ring-text { color: #F0F9FF; }
+        .nebula-theme .stats-card { background-color: rgba(10, 10, 20, 0.7); }
+
+        /* Nocturne Theme */
+        .nocturne-theme { background: linear-gradient(to top, #191970, #4B0000, #003300); color: #E5E5E5; font-family: 'DM Sans', sans-serif; }
+        .nocturne-theme .main-container { background-color: rgba(10, 10, 10, 0.6); backdrop-filter: blur(14px); border: 2px solid #8B0000; }
+        .nocturne-theme .header-text, .nocturne-theme .score-text { color: #E5E5E5; }
+        .nocturne-theme .sub-text { color: #48D1CC; }
+        .nocturne-theme .btn-positive { background-color: #006400; color: #E5E5E5; }
+        .nocturne-theme .btn-positive:hover { background-color: #008000; }
+        .nocturne-theme .btn-negative { background-color: #8B0000; color: #E5E5E5; }
+        .nocturne-theme .btn-negative:hover { background-color: #A52A2A; }
+        .nocturne-theme .btn-neutral { background-color: #4169E1; color: #E5E5E5; }
+        .nocturne-theme .btn-neutral:hover { background-color: #6495ED; }
+        .nocturne-theme .btn-secondary, .nocturne-theme .btn-action, .nocturne-theme .dropdown, .nocturne-theme .history-item { background-color: rgba(10, 10, 10, 0.8); border-color: rgba(72, 209, 204, 0.4); color: #E5E5E5; }
+        .nocturne-theme .btn-action { background-color: #4169E1; color: #E5E5E5; }
+        .nocturne-theme .btn-action:hover { background-color: #6495ED; }
+        .nocturne-theme .stats-value.positive, .nocturne-theme .profit-positive { color: #006400; }
+        .nocturne-theme .stats-value.negative, .nocturne-theme .profit-negative { color: #8B0000; }
+        .nocturne-theme .icon-btn { color: #48D1CC; }
+        .nocturne-theme .icon-btn:hover { color: #E5E5E5; }
+        .nocturne-theme .score-glow-positive { text-shadow: 0 0 10px #006400; }
+        .nocturne-theme .score-glow-negative { text-shadow: 0 0 10px #8B0000; }
+        .nocturne-theme .form-input { background-color: rgba(10, 10, 10, 0.8); border: 1px solid #48D1CC; color: #E5E5E5; }
+        .nocturne-theme .form-input::placeholder { color: #48D1CC; }
+        .nocturne-theme .ring-track { stroke: rgba(72, 209, 204, 0.3); }
+        .nocturne-theme .ring-wins { stroke: #006400; }
+        .nocturne-theme .ring-losses { stroke: #8B0000; }
+        .nocturne-theme .data-ring-text { color: #E5E5E5; }
+        .nocturne-theme .stats-card { background-color: rgba(10, 10, 10, 0.8); }
+
+        /* Obsidian Theme */
+        .obsidian-theme { background: radial-gradient(circle, #1F1F1F, #000000); color: #FFFFFF; font-family: 'IBM Plex Mono', monospace; }
+        .obsidian-theme .main-container { background-color: rgba(28, 28, 30, 0.5); backdrop-filter: blur(14px); border: 1px solid #E5E5E5; }
+        .obsidian-theme .header-text, .obsidian-theme .score-text { color: #FFFFFF; }
+        .obsidian-theme .sub-text { color: #A1A1AA; }
+        .obsidian-theme .btn-positive { background-color: #38BDF8; color: #000000; }
+        .obsidian-theme .btn-positive:hover { background-color: #0EA5E9; }
+        .obsidian-theme .btn-negative { background-color: #3F3F46; color: #E5E5E5; }
+        .obsidian-theme .btn-negative:hover { background-color: #52525B; }
+        .obsidian-theme .btn-neutral { background-color: #FFFFFF; color: #000000; }
+        .obsidian-theme .btn-neutral:hover { background-color: #E5E5E5; }
+        .obsidian-theme .btn-secondary, .obsidian-theme .btn-action, .obsidian-theme .dropdown, .obsidian-theme .history-item { background-color: rgba(28, 28, 30, 0.8); border-color: #A1A1AA; color: #FFFFFF; }
+        .obsidian-theme .btn-action { background-color: #FFFFFF; color: #000000; }
+        .obsidian-theme .btn-action:hover { background-color: #E5E5E5; }
+        .obsidian-theme .stats-value.positive, .obsidian-theme .profit-positive { color: #38BDF8; }
+        .obsidian-theme .stats-value.negative, .obsidian-theme .profit-negative { color: #A1A1AA; }
+        .obsidian-theme .icon-btn { color: #A1A1AA; }
+        .obsidian-theme .icon-btn:hover { color: #FFFFFF; }
+        .obsidian-theme .score-glow-positive { text-shadow: 0 0 8px #38BDF8; }
+        .obsidian-theme .score-glow-negative { text-shadow: none; }
+        .obsidian-theme .form-input { background-color: rgba(28, 28, 30, 0.8); border: 1px solid #A1A1AA; color: #FFFFFF; }
+        .obsidian-theme .form-input::placeholder { color: #A1A1AA; }
+        .obsidian-theme .ring-track { stroke: #3F3F46; }
+        .obsidian-theme .ring-wins { stroke: #38BDF8; }
+        .obsidian-theme .ring-losses { stroke: #A1A1AA; }
+        .obsidian-theme .data-ring-text { color: #FFFFFF; }
+        .obsidian-theme .stats-card { background-color: rgba(28, 28, 30, 0.8); }
+
+        /* Midnight Bloom Theme */
+        .midnight-bloom-theme { background: linear-gradient(to top, #0c0a2d, #1d1a3f); color: #e0e7ff; font-family: 'DM Sans', sans-serif; }
+        .midnight-bloom-theme .main-container { background-color: rgba(29, 26, 63, 0.5); backdrop-filter: blur(16px); border: 2px solid #f43f5e; }
+        .midnight-bloom-theme .header-text, .midnight-bloom-theme .score-text { color: #e0e7ff; }
+        .midnight-bloom-theme .sub-text { color: #a78bfa; }
+        .midnight-bloom-theme .btn-positive { background-color: #22d3ee; color: #1d1a3f; }
+        .midnight-bloom-theme .btn-positive:hover { background-color: #67e8f9; }
+        .midnight-bloom-theme .btn-negative { background-color: #f43f5e; color: #e0e7ff; }
+        .midnight-bloom-theme .btn-negative:hover { background-color: #fb7185; }
+        .midnight-bloom-theme .btn-neutral { background-color: #a78bfa; color: #1d1a3f; }
+        .midnight-bloom-theme .btn-neutral:hover { background-color: #c4b5fd; }
+        .midnight-bloom-theme .btn-secondary, .midnight-bloom-theme .btn-action, .midnight-bloom-theme .dropdown, .midnight-bloom-theme .history-item { background-color: rgba(29, 26, 63, 0.7); border-color: rgba(167, 139, 250, 0.4); color: #e0e7ff; }
+        .midnight-bloom-theme .btn-action { background-color: #a78bfa; color: #1d1a3f; }
+        .midnight-bloom-theme .btn-action:hover { background-color: #c4b5fd; }
+        .midnight-bloom-theme .stats-value.positive, .midnight-bloom-theme .profit-positive { color: #22d3ee; }
+        .midnight-bloom-theme .stats-value.negative, .midnight-bloom-theme .profit-negative { color: #f43f5e; }
+        .midnight-bloom-theme .icon-btn { color: #a78bfa; }
+        .midnight-bloom-theme .icon-btn:hover { color: #e0e7ff; }
+        .midnight-bloom-theme .score-glow-positive { text-shadow: 0 0 15px rgba(34, 211, 238, 0.6); }
+        .midnight-bloom-theme .score-glow-negative { text-shadow: 0 0 15px rgba(244, 63, 94, 0.6); }
+        .midnight-bloom-theme .form-input { background-color: rgba(29, 26, 63, 0.7); border: 1px solid #a78bfa; color: #e0e7ff; }
+        .midnight-bloom-theme .form-input::placeholder { color: #a78bfa; }
+        .midnight-bloom-theme .ring-track { stroke: rgba(167, 139, 250, 0.3); }
+        .midnight-bloom-theme .ring-wins { stroke: #22d3ee; }
+        .midnight-bloom-theme .ring-losses { stroke: #f43f5e; }
+        .midnight-bloom-theme .data-ring-text { color: #e0e7ff; }
+        .midnight-bloom-theme .stats-card { background-color: rgba(29, 26, 63, 0.7); }
+
+    </style>
+</head>
+<body class="obsidian-theme app-body">
+
+    <!-- PIN Screen -->
+    <div id="pin-overlay">
+        <div class="text-center">
+            <h2 class="text-2xl font-bold mb-8 tracking-widest">SECURITY ACCESS</h2>
+            <div id="pin-status" class="text-blue-400 mb-4 text-sm animate-pulse">Initializing Secure Connection...</div>
+            <input type="password" id="pin-input" class="pin-input" maxlength="4" placeholder="Wait" disabled>
+            <div id="pin-error" class="text-red-500 mt-4 text-sm hidden">ACCESS DENIED</div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- Main View -->
+        <div id="main-view" class="view active">
+            <!-- Header -->
+            <header class="flex justify-between items-center h-20 flex-shrink-0">
+                <button id="theme-switcher" class="icon-btn">
+                     <!-- Icon injected by JS -->
+                </button>
+                <div class="data-ring-container" id="data-ring">
+                    <svg class="data-ring-svg" viewBox="0 0 36 36">
+                        <path class="data-ring-circle ring-track" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+                        <path id="ring-losses" class="data-ring-circle ring-losses" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+                        <path id="ring-wins" class="data-ring-circle ring-wins" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+                    </svg>
+                    <div class="data-ring-text">
+                        <div class="data-ring-total">
+                            <span class="value" id="trades-tracker">0</span>
+                        </div>
+                        <div class="data-ring-details">
+                             <div class="flex flex-col items-center">
+                                 <span class="profit-value" id="live-profit-detail"></span>
+                                 <div class="flex space-x-2 mt-1">
+                                     <span class="wl-value" id="wins-tracker-detail">W: 0</span>
+                                     <span class="wl-value" id="losses-tracker-detail">L: 0</span>
+                                 </div>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+    
+            <!-- Main Score Display -->
+            <div class="text-center my-8 flex flex-col justify-center">
+                <h2 class="text-7xl font-bold score-text transition-shadow duration-300" id="main-score">0.00</h2>
+            </div>
+    
+            <!-- Action Buttons and Logs -->
+            <div class="mt-auto">
+                <!-- Template Selector -->
+                <div class="flex items-center justify-center space-x-2 mb-6">
+                    <select id="template-selector" class="dropdown rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    <button id="calc-btn" title="Calculator" class="icon-btn btn btn-secondary !p-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M12 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h8zM4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4z"/><path d="M4 2.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-2zm0 4a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-4z"/></svg>
+                    </button>
+                     <button id="edit-templates-btn" class="btn btn-secondary text-sm !py-2 !px-3">Edit</button>
+                </div>
+    
+                <!-- Buttons Grid -->
+                <div id="buttons-container" class="grid grid-cols-3 gap-4"></div>
+                
+                <!-- Open Mode UI (Hidden by default) -->
+                <div id="open-mode-container" class="open-mode-container hidden h-64">
+                    <!-- Negative Dial (Left) -->
+                    <div id="dial-negative" class="dial-track-container border-2 border-red-500/30">
+                        <div class="dial-value-display text-red-400">0.00</div>
+                        <div class="dial-handle"></div>
+                    </div>
+
+                    <!-- Center 0 Button -->
+                    <button class="center-zero-btn btn-neutral" id="open-mode-zero-btn">0</button>
+
+                    <!-- Positive Dial (Right) -->
+                    <div id="dial-positive" class="dial-track-container border-2 border-green-500/30">
+                        <div class="dial-value-display text-green-400">0.00</div>
+                        <div class="dial-handle"></div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="grid grid-cols-3 gap-4 pt-6 mt-6 border-t border-gray-700">
+                      <button id="undo-btn" class="btn btn-secondary col-span-1 flex justify-center items-center"></button>
+                      <button id="history-btn" class="btn btn-secondary col-span-1 flex justify-center items-center"></button>
+                      <button id="reset-btn" class="btn btn-secondary col-span-1 flex justify-center items-center"></button>
+                </div>
+                
+                <!-- Save Button -->
+                <div class="pt-4">
+                      <button id="save-btn" class="btn btn-action w-full">Save & Export Session</button>
+                </div>
+    
+                <!-- Saved Sessions Log -->
+                <div id="saved-sessions-container" class="pt-4 space-y-2 hidden">
+                    <div class="flex justify-between items-center border-b border-gray-700 pb-2">
+                        <h3 class="text-lg font-semibold header-text">Recent Exports</h3>
+                        <div class="flex items-center space-x-3">
+                            <button id="wipe-btn" title="Clear Visual Feed (Does not delete data)" class="icon-btn text-gray-400 hover:text-white">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1h-.995a.59.59 0 0 0-.01 0H11Zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5h9.916Zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47ZM8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5Z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="sessions-log" class="text-sm space-y-2 max-h-48 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Templates View -->
+        <div id="edit-templates-view" class="view">
+            <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <h3 class="text-xl font-bold">Edit Templates</h3>
+                <button type="button" class="icon-btn close-view-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                </button>
+            </div>
+            <div class="space-y-4 overflow-y-auto -mr-4 pr-4">
+                <div><label for="template-edit-selector" class="text-sm">Select Template to Edit:</label><select id="template-edit-selector" class="form-input"></select></div>
+                <div><label for="template-name-input" class="text-sm">Template Name:</label><input type="text" id="template-name-input" class="form-input"></div>
+                
+                <div class="flex items-center space-x-2 my-2">
+                    <input type="checkbox" id="open-mode-checkbox" class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <label for="open-mode-checkbox" class="text-sm font-bold">Enable OPEN Mode (Sliders)</label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="instrument-input" class="text-sm">Instrument</label>
+                        <input type="text" id="instrument-input" class="form-input" placeholder="e.g. ES">
+                    </div>
+                    <div>
+                        <label for="point-value-input" class="text-sm">Point Value</label>
+                        <input type="number" id="point-value-input" class="form-input" placeholder="e.g. 50">
+                    </div>
+                </div>
+                <div><label for="commission-input" class="text-sm">Commission ($ per trade)</label><input type="number" step="0.01" id="commission-input" class="form-input" placeholder="e.g., 1.24"></div>
+                
+                <!-- Standard Button Inputs -->
+                <div id="standard-inputs">
+                    <div><label for="positive-buttons-input" class="text-sm">Positive Buttons (comma separated):</label><input type="text" id="positive-buttons-input" class="form-input"></div>
+                    <div><label for="negative-buttons-input" class="text-sm">Negative Buttons (comma separated):</label><input type="text" id="negative-buttons-input" class="form-input"></div>
+                </div>
+
+                <!-- Open Mode Inputs -->
+                <div id="open-mode-inputs" class="hidden space-y-4 border border-blue-500/30 p-3 rounded">
+                    <div><label for="increment-input" class="text-sm">Increment Step</label><input type="number" id="increment-input" class="form-input" step="0.25" placeholder="0.25"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label for="max-pos-input" class="text-sm">Max Positive</label><input type="number" id="max-pos-input" class="form-input" placeholder="20"></div>
+                        <div><label for="max-neg-input" class="text-sm">Max Negative</label><input type="number" id="max-neg-input" class="form-input" placeholder="-10"></div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-4"><button id="delete-template-btn" class="btn bg-red-600 text-white text-xs px-3 py-2">Delete</button><div class="space-x-2"><button type="button" class="btn btn-secondary close-view-btn">Close</button><button id="save-template-btn" class="btn btn-action">Save</button></div></div>
+            </div>
+        </div>
+
+        <!-- Manage Models View -->
+        <div id="manage-models-view" class="view">
+             <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <h3 class="text-xl font-bold">Manage Models</h3>
+                <button type="button" class="icon-btn close-view-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                 <div>
+                    <label class="text-sm font-medium">New Model Details</label>
+                    <input type="text" id="new-model-name" class="form-input" placeholder="Name (e.g. TrendPullback)">
+                    <input type="text" id="new-model-mgmt" class="form-input" placeholder="Management (e.g. Aggressive)">
+                    <input type="text" id="new-model-ratio" class="form-input" placeholder="Ratio/Stop (e.g. 1:2 / 10pts)">
+                    <input type="text" id="new-model-exit" class="form-input" placeholder="Exit (e.g. Moving Avg)">
+                    <input type="text" id="new-model-instrument" class="form-input" placeholder="Instrument (e.g. NQ)">
+                </div>
+                <button id="add-model-btn" class="btn btn-action w-full">Add Model</button>
+                
+                <div class="border-t border-gray-700 pt-4 mt-4">
+                     <h4 class="text-sm font-bold mb-2">Existing Models</h4>
+                     <div id="models-list" class="space-y-2 text-xs max-h-48 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save View -->
+        <div id="save-view" class="view">
+             <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <h3 class="text-xl font-bold">Export to Cloud</h3>
+                <button type="button" class="icon-btn close-view-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="flex items-end space-x-2">
+                     <div class="flex-grow">
+                        <label for="save-model-selector" class="text-sm font-medium">Select Model</label>
+                        <select id="save-model-selector" class="form-input"></select>
+                     </div>
+                     <button id="open-manage-models-btn" class="btn btn-secondary !p-2" title="Add/Edit Models">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+                     </button>
+                </div>
+
+                <div><label for="save-date" class="text-sm font-medium">Date</label><input type="date" id="save-date" class="form-input"></div>
+                <div><label class="text-sm font-medium">Session Time</label><select id="session-time-selector" class="form-input"><option value="London (02:00 - 06:00)">London (02:00 - 06:00)</option><option value="Early (08:30 - 12:30)">Early (08:30 - 12:30)</option><option value="Late (12:30 - 15:00)">Late (12:30 - 15:00)</option><option value="Custom">Custom</option></select></div>
+                <div id="custom-time-inputs" class="hidden grid grid-cols-2 gap-2"><div><label for="start-time" class="text-xs">Start</label><input type="time" id="start-time" class="form-input"></div><div><label for="end-time" class="text-xs">End</label><input type="time" id="end-time" class="form-input"></div></div>
+                
+                <div class="bg-blue-900/20 p-3 rounded text-xs mt-4">
+                    <p class="font-bold mb-1">Export Preview:</p>
+                    <p>This session will be uploaded to App B.</p>
+                    <p class="mt-1">P/L: <span id="preview-pl"></span></p>
+                </div>
+
+                <div class="flex justify-end space-x-2 mt-4"><button type="button" class="btn btn-secondary close-view-btn">Cancel</button><button id="confirm-save-btn" class="btn btn-action">Upload & Clear</button></div>
+            </div>
+        </div>
+
+        <!-- Theme Selector View -->
+        <div id="theme-view" class="view">
+            <div class="flex justify-between items-center mb-6 flex-shrink-0">
+                <h3 class="text-xl font-bold header-text">Select a Theme</h3>
+                <button type="button" class="icon-btn close-view-btn">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                </button>
+            </div>
+            <div id="theme-grid" class="grid grid-cols-2 sm:grid-cols-2 gap-4 overflow-y-auto -mr-4 pr-4"></div>
+        </div>
+        
+        <!-- Other Views (Reset, Delete Template, Restore) -->
+        <div id="reset-view" class="view justify-center text-center">
+            <div><h3 class="text-xl font-bold">Reset Tracker?</h3><p class="text-sm sub-text my-4">This will clear the current counts but NOT save them.</p><div class="flex justify-center space-x-4 mt-4"><button type="button" class="btn btn-secondary close-view-btn">Cancel</button><button id="confirm-reset-btn" class="btn btn-negative px-4 py-2">Reset</button></div></div>
+        </div>
+        <div id="delete-template-view" class="view justify-center text-center">
+            <div><h3 class="text-xl font-bold">Delete Template?</h3><p class="text-sm sub-text my-4">This cannot be undone.</p><div class="flex justify-center space-x-4 mt-4"><button type="button" class="btn btn-secondary close-view-btn">Cancel</button><button id="confirm-delete-template-btn" class="btn btn-negative px-4 py-2">Delete</button></div></div>
+        </div>
+        
+        <!-- Wipe All Confirmation -->
+        <div id="wipe-all-view" class="view justify-center text-center">
+            <div><h3 class="text-xl font-bold text-red-500">Wipe All History?</h3><p class="text-sm sub-text my-4">This will permanently delete ALL saved sessions from the global database. App B will also lose this data.</p><div class="flex justify-center space-x-4 mt-4"><button type="button" class="btn btn-secondary close-view-btn">Cancel</button><button id="confirm-wipe-btn" class="btn btn-negative px-4 py-2">Wipe Everything</button></div></div>
+        </div>
+
+        <div id="calc-view" class="view">
+             <div class="flex justify-between items-center mb-4 flex-shrink-0"><h3 class="text-xl font-bold">Edit Calculation</h3><button type="button" class="icon-btn close-view-btn"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg></button></div><p class="text-sm sub-text mb-2">Separate values with a space.</p><textarea id="calc-input" class="form-input h-24 flex-grow"></textarea><div class="flex justify-end space-x-2 mt-4"><button type="button" class="btn btn-secondary close-view-btn">Cancel</button><button id="update-calc-btn" class="btn btn-action">Update</button></div>
+        </div>
+        <div id="restore-session-view" class="view justify-center text-center">
+            <div><h3 class="text-xl font-bold">Unsaved Data</h3><p class="text-sm sub-text my-4">Restore your previous incomplete session?</p><div class="flex justify-center space-x-4 mt-4"><button id="discard-session-btn" class="btn btn-secondary">Discard</button><button id="restore-session-btn" class="btn btn-action px-4 py-2">Restore</button></div></div>
+        </div>
+
+        <div id="status-bar" class="text-xs text-center p-2 sub-text mt-auto"></div>
+    </div>
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, getDocs, onSnapshot, setDoc, addDoc, deleteDoc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONSTANTS ---
+            const MASTER_KEY = "01512899027";
+            const PIN_DOC_PATH = "settings/pin";
+
+            // --- CONFIG ---
+            // NOTE: This uses the environment variable provided by the platform.
+    const firebaseConfig = {
+  apiKey: "AIzaSyBIlEbTnEzkcXJs0sRKOGx0xA5AWOWZdb4",
+  authDomain: "tracker2026-330ca.firebaseapp.com",
+  projectId: "tracker2026-330ca",
+  storageBucket: "tracker2026-330ca.firebasestorage.app",
+  messagingSenderId: "810324319247",
+  appId: "1:810324319247:web:97ea4879073fc4f619577a"
+};
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-ecosystem';
+            
+            // --- STATE ---
+            let score = 0.00, wins = 0, losses = 0, totalTrades = 0, maxWin = 0, maxLoss = 0;
+            let history = [], templates = {}, savedModels = [];
+            let db, auth;
+            let templateToDeleteName = null;
+            let currentPin = "1234"; // Default fallback
+
+            // --- DOM ELEMENTS ---
+            const mainScoreEl = document.getElementById('main-score');
+            const winsTrackerDetailEl = document.getElementById('wins-tracker-detail');
+            const lossesTrackerDetailEl = document.getElementById('losses-tracker-detail');
+            const tradesTrackerEl = document.getElementById('trades-tracker');
+            const buttonsContainer = document.getElementById('buttons-container');
+            const templateSelector = document.getElementById('template-selector');
+            const themeSwitcher = document.getElementById('theme-switcher');
+            const dataRingContainer = document.getElementById('data-ring');
+            const ringWinsEl = document.getElementById('ring-wins');
+            const ringLossesEl = document.getElementById('ring-losses');
+            const liveProfitDetailEl = document.getElementById('live-profit-detail');
+            const statusBar = document.getElementById('status-bar');
+            
+            const pinOverlay = document.getElementById('pin-overlay');
+            const pinInput = document.getElementById('pin-input');
+            const pinError = document.getElementById('pin-error');
+            let isAppUnlocked = false;
+            
+            const paletteIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5.5 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M16 8c0 3.15-1.866 5.959-4.573 7.164a.5.5 0 1 1-.457-.894A7.002 7.002 0 0 0 15 8a.5.5 0 0 1 1 0z"/></svg>`;
+            
+            // --- CONSTANTS ---
+            // Reduced Theme List as requested
+            const themeData = [
+                { id: 'obsidian-theme', name: 'Obsidian', font: "'IBM Plex Mono', monospace", colors: { bg: 'rgba(28, 28, 30, 0.8)', text: '#FFFFFF', border: '#A1A1AA', p: '#38BDF8', n: '#3F3F46', a: '#FFFFFF' } },
+                { id: 'iridescent-theme', name: 'Iridescent', font: "'Poppins', sans-serif", colors: { bg: 'rgba(255, 255, 255, 0.4)', text: '#0f766e', border: '#d8b4fe', p: 'rgba(167, 243, 208, 0.7)', n: 'rgba(251, 207, 232, 0.7)', a: 'rgba(216, 180, 254, 0.7)' } },
+                { id: 'nebula-theme', name: 'Nebula', font: "'Exo 2', sans-serif", colors: { bg: 'rgba(10, 10, 20, 0.7)', text: '#F0F9FF', border: '#A855F7', p: '#14B8A6', n: '#D946EF', a: '#6366F1' } },
+                { id: 'midnight-bloom-theme', name: 'Midnight Bloom', font: "'DM Sans', sans-serif", colors: { bg: 'rgba(29, 26, 63, 0.5)', text: '#e0e7ff', border: '#f43f5e', p: '#22d3ee', n: '#f43f5e', a: '#a78bfa' } },
+                { id: 'nocturne-theme', name: 'Nocturne', font: "'DM Sans', sans-serif", colors: { bg: 'rgba(10, 10, 10, 0.8)', text: '#E5E5E5', border: '#8B0000', p: '#006400', n: '#8B0000', a: '#4169E1' } },
+                { id: 'sunrise-theme', name: 'Sunrise', font: "'Lato', sans-serif", colors: { bg: 'rgba(255, 255, 255, 0.65)', text: '#422006', border: '#F97316', p: '#F97316', n: '#581C87', a: '#854D0E' } }
+            ];
+
+            const defaultTemplates = { 
+                "ES": { instrument: "ES", pointValue: 50, commission: 4.20, positive: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5], negative: [-2, -2.5, -3] },
+                "NQ": { instrument: "NQ", pointValue: 20, commission: 4.20, positive: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], negative: [-4, -6, -8, -10] } 
+            };
+
+            // --- HELPER FUNCTIONS ---
+            const setStatus = (msg, type = 'loading') => {
+                if(!statusBar) return;
+                statusBar.textContent = msg;
+                statusBar.className = `text-xs text-center p-2 mt-auto ${type === 'error' ? 'text-red-400' : 'sub-text'}`;
+                if (type !== 'loading') setTimeout(() => statusBar.textContent = '', 3000);
+            };
+
+            const showView = (viewId) => {
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                document.getElementById(viewId).classList.add('active');
+                if (viewId === 'theme-view') updateThemeSelectionVisuals();
+            };
+
+            const applyTheme = (theme) => {
+                document.body.className = `app-body ${theme}`;
+                localStorage.setItem('appA_theme', theme);
+                updateThemeSelectionVisuals();
+            };
+
+            const formatDate = (isoDate) => { 
+                if (!isoDate) return ''; 
+                const [y, m, d] = isoDate.split('-'); 
+                return `${d}/${m}/${y}`; 
+            };
+
+            // --- UI RENDER LOGIC ---
+            // New Animation Function
+            let currentAnimationInterval = null;
+
+            const animateValue = (element, start, end, duration) => {
+                if (currentAnimationInterval) clearInterval(currentAnimationInterval);
+                if (start === end) {
+                    element.textContent = end.toFixed(2);
+                    return;
+                }
+                const startTime = new Date().getTime();
+                
+                currentAnimationInterval = setInterval(() => {
+                    const now = new Date().getTime();
+                    const progress = Math.min((now - startTime) / duration, 1);
+                    const val = start + ((end - start) * progress);
+                    element.textContent = val.toFixed(2);
+                    if (progress >= 1) {
+                        clearInterval(currentAnimationInterval);
+                        element.textContent = end.toFixed(2);
+                    }
+                }, 20);
+            };
+
+            const updateDisplay = (previousScore = score) => {
+                // Animate Score
+                if (previousScore !== score) {
+                    animateValue(mainScoreEl, previousScore, score, 300);
+                    mainScoreEl.classList.add(score > 0 ? 'score-glow-positive' : 'score-glow-negative');
+                    setTimeout(() => mainScoreEl.classList.remove('score-glow-positive', 'score-glow-negative'), 500);
+                } else {
+                     mainScoreEl.textContent = score.toFixed(2);
+                }
+
+                // Update W/L
+                winsTrackerDetailEl.textContent = `W: ${wins}`;
+                lossesTrackerDetailEl.textContent = `L: ${losses}`;
+                tradesTrackerEl.textContent = totalTrades;
+                
+                // Live Profit
+                const currentTemplate = templates[templateSelector.value];
+                if (totalTrades > 0 && currentTemplate?.pointValue != null) {
+                    const profit = (score * currentTemplate.pointValue) - (totalTrades * (currentTemplate.commission || 0));
+                    liveProfitDetailEl.textContent = `$${profit.toFixed(2)}`;
+                    liveProfitDetailEl.className = `profit-value ${profit >= 0 ? 'profit-positive' : 'profit-negative'}`;
+                } else {
+                    liveProfitDetailEl.textContent = '';
+                }
+
+                // Ring
+                const winP = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+                const lossP = totalTrades > 0 ? (losses / totalTrades) * 100 : 0;
+                ringWinsEl.style.strokeDasharray = `${winP} ${100 - winP}`;
+                ringLossesEl.style.strokeDasharray = `${lossP} ${100 - lossP}`;
+                ringLossesEl.style.strokeDashoffset = -winP;
+            };
+
+            // OPEN MODE LOGIC
+            const setupDials = (template) => {
+                if(!template.openMode) return;
+                
+                const posDial = document.getElementById('dial-positive');
+                const negDial = document.getElementById('dial-negative');
+                const zeroBtn = document.getElementById('open-mode-zero-btn');
+                
+                const increment = parseFloat(template.increment) || 0.25;
+                const maxPos = parseFloat(template.maxPos) || 20;
+                const maxNeg = parseFloat(template.maxNeg) || -10; // usually negative number
+                
+                // Helper for both dials
+                const handleDialInteraction = (dialEl, isPositive, maxVal) => {
+                    const handle = dialEl.querySelector('.dial-handle');
+                    const display = dialEl.querySelector('.dial-value-display');
+                    const trackHeight = dialEl.offsetHeight;
+                    const handleHeight = handle.offsetHeight;
+                    const effectiveHeight = trackHeight - handleHeight - 20; // 20px padding
+                    
+                    let isDragging = false;
+                    let currentValue = 0;
+                    
+                    const updateVisuals = (clientY) => {
+                        const rect = dialEl.getBoundingClientRect();
+                        // Calculate position from bottom (0) to top (Max)
+                        let relativeY = rect.bottom - clientY - (handleHeight/2) - 10; 
+                        
+                        // Clamp
+                        relativeY = Math.max(0, Math.min(relativeY, effectiveHeight));
+                        
+                        // Map to value
+                        const ratio = relativeY / effectiveHeight;
+                        let rawValue = ratio * Math.abs(maxVal);
+                        
+                        // Snap to increment
+                        let snapped = Math.round(rawValue / increment) * increment;
+                        if(Math.abs(snapped) > Math.abs(maxVal)) snapped = Math.abs(maxVal);
+                        
+                        if(!isPositive) snapped = -snapped;
+                        currentValue = snapped;
+                        
+                        // Update UI
+                        handle.style.bottom = `${10 + (ratio * effectiveHeight)}px`;
+                        display.textContent = (currentValue > 0 ? '+' : '') + currentValue.toFixed(2);
+                        dialEl.classList.add('active');
+                    };
+                    
+                    const startDrag = (e) => {
+                        isDragging = true;
+                        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                        updateVisuals(clientY);
+                    };
+                    
+                    const moveDrag = (e) => {
+                        if(!isDragging) return;
+                        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                        updateVisuals(clientY);
+                    };
+                    
+                    const endDrag = (e) => {
+                        if(!isDragging) return;
+                        isDragging = false;
+                        dialEl.classList.remove('active');
+                        // Instant Commit
+                        if(currentValue !== 0) {
+                             handleButtonClick(e, currentValue);
+                        }
+                        // Reset visual to 0? User wants fast. Snapping back feels clearest for next input.
+                        handle.style.bottom = '10px';
+                        display.textContent = "0.00";
+                    };
+                    
+                    // Events
+                    dialEl.addEventListener('touchstart', startDrag, {passive: false});
+                    window.addEventListener('touchmove', moveDrag, {passive: false});
+                    window.addEventListener('touchend', endDrag);
+                    
+                    // Mouse support for testing
+                    dialEl.addEventListener('mousedown', startDrag);
+                    window.addEventListener('mousemove', moveDrag);
+                    window.addEventListener('mouseup', endDrag);
+                };
+                
+                // Initialize
+                // Clear old listeners to avoid dupes? 
+                // Simple way: Clone nodes to strip listeners
+                const newPos = posDial.cloneNode(true);
+                const newNeg = negDial.cloneNode(true);
+                posDial.parentNode.replaceChild(newPos, posDial);
+                negDial.parentNode.replaceChild(newNeg, negDial);
+                
+                handleDialInteraction(newPos, true, maxPos);
+                handleDialInteraction(newNeg, false, maxNeg);
+                
+                // Zero button
+                const newZero = zeroBtn.cloneNode(true);
+                zeroBtn.parentNode.replaceChild(newZero, zeroBtn);
+                newZero.onclick = (e) => handleButtonClick(e, 0);
+            };
+
+            const renderButtons = (templateName) => {
+                const template = templates[templateName];
+                if (!template) return;
+                
+                const btnContainer = document.getElementById('buttons-container');
+                const openContainer = document.getElementById('open-mode-container');
+                
+                if (template.openMode) {
+                    btnContainer.classList.add('hidden');
+                    openContainer.classList.remove('hidden');
+                    setupDials(template);
+                } else {
+                    openContainer.classList.add('hidden');
+                    btnContainer.classList.remove('hidden');
+                    
+                    buttonsContainer.innerHTML = '';
+                    const allButtons = [...(template.positive || []).sort((a, b) => a - b), 0, ...(template.negative || []).sort((a, b) => b - a)];
+                    allButtons.forEach(val => {
+                        const btn = document.createElement('button');
+                        btn.textContent = (val > 0 ? '+' : '') + (Number.isInteger(val) ? val : val.toFixed(2));
+                        btn.className = `calc-btn ${val > 0 ? 'btn-positive' : val < 0 ? 'btn-negative' : 'btn-neutral'}`;
+                        btn.onclick = (e) => handleButtonClick(e, val);
+                        buttonsContainer.appendChild(btn);
+                    });
+                }
+            };
+
+            const renderThemeSelector = () => {
+                const grid = document.getElementById('theme-grid');
+                grid.innerHTML = '';
+                themeData.forEach(theme => {
+                    const card = document.createElement('div');
+                    card.className = 'theme-card';
+                    card.dataset.theme = theme.id;
+                    card.style.background = theme.colors.bg;
+                    card.style.color = theme.colors.text;
+                    card.style.borderColor = theme.colors.border + '80';
+                    card.innerHTML = `
+                        <div class="checkmark-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/></svg></div>
+                        <div class="theme-card-header"><span class="theme-name-new" style="font-family: ${theme.font};">${theme.name}</span></div>
+                        <div class="theme-swatches"><div class="swatch" style="background: ${theme.colors.p};"></div><div class="swatch" style="background: ${theme.colors.n};"></div><div class="swatch" style="background: ${theme.colors.a};"></div></div>
+                    `;
+                    grid.appendChild(card);
+                });
+            };
+
+            const updateThemeSelectionVisuals = () => {
+                const current = localStorage.getItem('appA_theme') || 'obsidian-theme';
+                document.querySelectorAll('.theme-card').forEach(card => {
+                    card.classList.toggle('selected', card.dataset.theme === current);
+                    if(card.dataset.theme === current) {
+                        const t = themeData.find(x => x.id === current);
+                        if(t) card.style.setProperty('--selected-theme-border-color', t.colors.border);
+                    }
+                });
+            };
+
+            // --- CORE LOGIC ---
+            const handleButtonClick = async (event, value) => {
+                const prev = score;
+                // Precision update: handle float math carefully
+                score = parseFloat((score + value).toFixed(2));
+                history.push({ state: { score: prev, wins, losses, totalTrades }, value });
+                
+                totalTrades++;
+                if (value > 0) wins++;
+                else if (value < 0) losses++;
+
+                const currentTemplate = templates[templateSelector.value];
+                if(currentTemplate) {
+                     const profit = (score * currentTemplate.pointValue) - (totalTrades * currentTemplate.commission);
+                     maxWin = Math.max(maxWin, profit);
+                     maxLoss = Math.min(maxLoss, profit);
+                }
+
+                // Animation
+                const currentTheme = localStorage.getItem('appA_theme');
+                const tInfo = themeData.find(t => t.id === currentTheme);
+                if(tInfo) {
+                    const color = value > 0 ? tInfo.colors.p : (value < 0 ? tInfo.colors.n : tInfo.colors.a);
+                    const mainContainer = document.querySelector('.main-container');
+                    mainContainer.style.setProperty('--anim-color', color);
+                    mainContainer.style.setProperty('--anim-color-transparent', color + '00');
+                    
+                    // Trigger pulse
+                    mainContainer.classList.remove('border-pulse-anim');
+                    void mainContainer.offsetWidth; // Trigger reflow
+                    mainContainer.classList.add('border-pulse-anim');
+                }
+
+                updateDisplay(prev);
+                await autoSaveSession();
+            };
+
+            const resetCalculator = async () => {
+                const prev = score;
+                score = 0.00; wins = 0; losses = 0; totalTrades = 0; maxWin = 0; maxLoss = 0; history = [];
+                updateDisplay(prev);
+                await clearAutoSave();
+            };
+
+            const wipeAllHistory = async () => {
+                // Delete everything in global_sessions
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'global_sessions'));
+                const snapshot = await getDocs(q);
+                const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+            };
+
+            // --- DATABASE LOGIC ---
+            // NOTE: Paths updated to 'public' to support shared ecosystem
+            
+            const autoSaveSession = async () => {
+                if (!isAppUnlocked) return;
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'appA_autosave', 'current');
+                await setDoc(ref, { score, wins, losses, totalTrades, maxWin, maxLoss, history, template: templateSelector.value });
+            };
+
+            const clearAutoSave = async () => {
+                if (!isAppUnlocked) return;
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'appA_autosave', 'current'));
+            };
+
+            const saveSessionToGlobal = async (data) => {
+                // Saves to Shared Collection for App B
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'global_sessions'), {
+                    ...data,
+                    timestamp: new Date().toISOString()
+                });
+            };
+
+            const saveModel = async (modelData) => {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'global_models'), modelData);
+            };
+
+            const deleteTemplate = async (name) => {
+                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'feeder_templates'));
+                 const snapshot = await getDocs(q);
+                 snapshot.forEach(async (d) => {
+                     if(d.data().name === name) await deleteDoc(d.ref);
+                 });
+            };
+
+            // --- INITIALIZATION ---
+            window.initializeData = async () => {
+                if(!auth || !db) return;
+                setStatus('Loading ecosystem...', 'loading');
+
+                // 1. Load Templates (Shared)
+                const templatesRef = collection(db, 'artifacts', appId, 'public', 'data', 'feeder_templates');
+                const tSnap = await getDocs(templatesRef);
+                
+                if (tSnap.empty) {
+                    // Seed defaults if empty
+                    for(const [name, data] of Object.entries(defaultTemplates)) {
+                         await addDoc(templatesRef, { name, ...data });
+                    }
+                }
+
+                onSnapshot(templatesRef, (snap) => {
+                    templates = {};
+                    snap.forEach(doc => { templates[doc.data().name] = doc.data(); });
+                    
+                    // Populate Selectors
+                    const select = document.getElementById('template-selector');
+                    const editSelect = document.getElementById('template-edit-selector');
+                    const current = select.value;
+                    
+                    select.innerHTML = '';
+                    editSelect.innerHTML = '<option value="" disabled selected>Select or Add New</option><option value="_new">-- Add New Template --</option>';
+                    
+                    Object.keys(templates).sort().forEach(name => {
+                        select.add(new Option(name, name));
+                        editSelect.add(new Option(name, name));
+                    });
+                    
+                    select.value = templates[current] ? current : (Object.keys(templates)[0] || '');
+                    renderButtons(select.value);
+                });
+
+                // 2. Load Global Models (For the Save dropdown)
+                const modelsRef = collection(db, 'artifacts', appId, 'public', 'data', 'global_models');
+                onSnapshot(modelsRef, (snap) => {
+                    savedModels = [];
+                    const modelsList = document.getElementById('models-list');
+                    const saveSelector = document.getElementById('save-model-selector');
+                    
+                    modelsList.innerHTML = '';
+                    saveSelector.innerHTML = '<option value="" disabled selected>Select Model</option>';
+                    
+                    snap.forEach(doc => {
+                        const m = doc.data();
+                        savedModels.push(m);
+                        
+                        // Populate list in Manager
+                        const item = document.createElement('div');
+                        item.className = 'p-2 bg-gray-700/30 rounded border border-gray-600';
+                        item.textContent = m.fullString;
+                        modelsList.appendChild(item);
+
+                        // Populate Save Dropdown
+                        const opt = new Option(m.fullString, m.fullString);
+                        saveSelector.add(opt);
+                    });
+                });
+                
+                // 3. Check Autosave
+                const autoRef = doc(db, 'artifacts', appId, 'public', 'data', 'appA_autosave', 'current');
+                const autoSnap = await getDoc(autoRef);
+                if (autoSnap.exists()) {
+                    const d = autoSnap.data();
+                    document.getElementById('restore-session-btn').onclick = async () => {
+                        score = d.score; wins = d.wins; losses = d.losses; totalTrades = d.totalTrades; maxWin = d.maxWin; maxLoss = d.maxLoss; history = d.history;
+                        document.getElementById('template-selector').value = d.template;
+                        renderButtons(d.template);
+                        updateDisplay(0);
+                        await clearAutoSave();
+                        showView('main-view');
+                    };
+                    document.getElementById('discard-session-btn').onclick = async () => {
+                        await clearAutoSave();
+                        showView('main-view');
+                    };
+                    showView('restore-session-view');
+                }
+
+                // 4. Load History (Last 10 Recent Exports) - ONLY from global, limited to 10
+                const sessionsRef = query(collection(db, 'artifacts', appId, 'public', 'data', 'global_sessions'), orderBy('timestamp', 'desc'), limit(10));
+                
+                onSnapshot(sessionsRef, (snap) => {
+                    const log = document.getElementById('sessions-log');
+                    // Only clear if not explicitly hidden by user action (simplified for now: always refresh on update)
+                    if (!log.classList.contains('visually-cleared')) {
+                        log.innerHTML = '';
+                        let sessions = [];
+                        snap.forEach(d => sessions.push(d.data()));
+                        
+                        sessions.forEach(s => {
+                            const el = document.createElement('div');
+                            el.className = 'history-item p-2 rounded-md border border-gray-700 bg-gray-800/50';
+                            const profit = (s.score * s.pointValue) - (s.totalTrades * s.commission);
+                            el.innerHTML = `
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <div class="font-bold text-sm">${formatDate(s.date)} <span class="text-xs opacity-75">| ${s.instrument}</span></div>
+                                        <div class="text-xs text-blue-300 mt-1">${s.modelName || 'No Model'}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}">$${profit.toFixed(2)}</div>
+                                        <div class="text-xs mt-1">W:${s.wins} L:${s.losses}</div>
+                                    </div>
+                                </div>
+                            `;
+                            log.appendChild(el);
+                        });
+                    }
+                });
+
+                setStatus('System Online', 'success');
+            };
+
+            // --- EVENT LISTENERS ---
+            themeSwitcher.innerHTML = paletteIcon;
+            document.getElementById('undo-btn').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg>`;
+            document.getElementById('history-btn').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8.515 1.019A7 7 0 0 0 8 1V0a8 8 0 0 1 .589.022l-.074.997zM11.985 1.795a7.002 7.002 0 0 0-3.582-1.795l.074-.997a8.001 8.001 0 0 1 4.09 2.025l-.71.71A7.001 7.001 0 0 0 11.985 1.795zM4.015 1.795a7.002 7.002 0 0 0-3.582 1.795l.71.71a7.001 7.001 0 0 0 3.582-1.795L4.015 1.795zM1.795 4.015a7.002 7.002 0 0 0-1.795 3.582l.997.074a7.001 7.001 0 0 0 1.795-3.582l-.997-.074zM14.205 4.015a7.002 7.002 0 0 0-1.795-3.582l-.71.71a7.001 7.001 0 0 0 1.795 3.582l.997-.074zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 1a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/><path d="M8 5.5a.5.5 0 0 1 .5.5v2.5a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5z"/></svg>`;
+            document.getElementById('reset-btn').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/></svg>`;
+
+            const safeAttachListener = (id, event, handler) => {
+                const el = document.getElementById(id);
+                if(el) el.addEventListener(event, handler);
+            };
+
+            // FIX: Attach listener to the grid container, not individual cards, for dynamic content
+            const themeGrid = document.getElementById('theme-grid');
+            if (themeGrid) {
+                themeGrid.addEventListener('click', (e) => {
+                    const card = e.target.closest('.theme-card');
+                    if (card) {
+                        applyTheme(card.dataset.theme);
+                        showView('main-view');
+                    }
+                });
+            }
+            safeAttachListener('theme-switcher', 'click', () => showView('theme-view'));
+
+            // Fixed: Data Ring Click Listener
+            const ringEl = document.getElementById('data-ring');
+            if(ringEl) {
+                ringEl.addEventListener('click', () => ringEl.classList.toggle('show-details'));
+            }
+
+            safeAttachListener('history-btn', 'click', () => document.getElementById('saved-sessions-container').classList.toggle('hidden'));
+            
+            safeAttachListener('undo-btn', 'click', async () => {
+                if (history.length) {
+                    const last = history.pop();
+                    const prevScore = score;
+                    score = last.state.score; wins = last.state.wins; losses = last.state.losses; totalTrades = last.state.totalTrades;
+                    updateDisplay(prevScore); // Pass previous score for animation
+                    await autoSaveSession();
+                }
+            });
+            
+            safeAttachListener('reset-btn', 'click', () => showView('reset-view'));
+            safeAttachListener('confirm-reset-btn', 'click', async () => { await resetCalculator(); showView('main-view'); });
+            
+            document.querySelectorAll('.close-view-btn').forEach(b => b.onclick = () => showView('main-view'));
+            
+            // "Clear Visual Feed" Logic
+            safeAttachListener('wipe-btn', 'click', () => {
+                // Just clear the visual list, do NOT delete data
+                const log = document.getElementById('sessions-log');
+                log.innerHTML = '';
+                log.classList.add('visually-cleared'); // Flag to prevent auto-repopulate immediately
+                setStatus('Feed Cleared (Data Safe)', 'success');
+            });
+
+            // Calc Logic
+            safeAttachListener('calc-btn', 'click', () => {
+                const histStr = history.map(h => h.value || 0).join(' ');
+                document.getElementById('calc-input').value = histStr;
+                showView('calc-view');
+            });
+
+            safeAttachListener('update-calc-btn', 'click', async (e) => {
+                const values = document.getElementById('calc-input').value.trim().split(' ').map(Number).filter(n => !isNaN(n)); 
+                await resetCalculator(); 
+                for (const val of values) {
+                    await handleButtonClick(e, val);
+                }
+                showView('main-view'); 
+            });
+
+            // Templates Logic (Standard + OPEN Mode)
+            const templateEditSelector = document.getElementById('template-edit-selector');
+            const templateNameInput = document.getElementById('template-name-input');
+            const instrumentInput = document.getElementById('instrument-input');
+            const pointValueInput = document.getElementById('point-value-input');
+            const commissionInput = document.getElementById('commission-input');
+            const positiveButtonsInput = document.getElementById('positive-buttons-input');
+            const negativeButtonsInput = document.getElementById('negative-buttons-input');
+            const deleteTemplateBtn = document.getElementById('delete-template-btn');
+            
+            // Open Mode Inputs
+            const openModeCheckbox = document.getElementById('open-mode-checkbox');
+            const standardInputs = document.getElementById('standard-inputs');
+            const openModeInputs = document.getElementById('open-mode-inputs');
+            const incrementInput = document.getElementById('increment-input');
+            const maxPosInput = document.getElementById('max-pos-input');
+            const maxNegInput = document.getElementById('max-neg-input');
+
+            templateSelector.onchange = (e) => renderButtons(e.target.value);
+            safeAttachListener('edit-templates-btn', 'click', () => showView('edit-templates-view'));
+            
+            // Toggle Input Visibility based on Checkbox
+            if(openModeCheckbox) {
+                openModeCheckbox.addEventListener('change', () => {
+                    if(openModeCheckbox.checked) {
+                        standardInputs.classList.add('hidden');
+                        openModeInputs.classList.remove('hidden');
+                    } else {
+                        standardInputs.classList.remove('hidden');
+                        openModeInputs.classList.add('hidden');
+                    }
+                });
+            }
+            
+            if(templateEditSelector) {
+                templateEditSelector.onchange = () => {
+                    const name = templateEditSelector.value;
+                    if(name === '_new') {
+                        templateNameInput.value = '';
+                        instrumentInput.value = '';
+                        pointValueInput.value = '';
+                        commissionInput.value = '';
+                        positiveButtonsInput.value = '';
+                        negativeButtonsInput.value = '';
+                        
+                        openModeCheckbox.checked = false;
+                        incrementInput.value = '';
+                        maxPosInput.value = '';
+                        maxNegInput.value = '';
+                        standardInputs.classList.remove('hidden');
+                        openModeInputs.classList.add('hidden');
+                        
+                        deleteTemplateBtn.classList.add('hidden');
+                    } else {
+                        const t = templates[name];
+                        if(t) {
+                            templateNameInput.value = name;
+                            instrumentInput.value = t.instrument;
+                            pointValueInput.value = t.pointValue;
+                            commissionInput.value = t.commission;
+                            
+                            if(t.openMode) {
+                                openModeCheckbox.checked = true;
+                                incrementInput.value = t.increment;
+                                maxPosInput.value = t.maxPos;
+                                maxNegInput.value = t.maxNeg;
+                                standardInputs.classList.add('hidden');
+                                openModeInputs.classList.remove('hidden');
+                            } else {
+                                openModeCheckbox.checked = false;
+                                positiveButtonsInput.value = (t.positive || []).join(', ');
+                                negativeButtonsInput.value = (t.negative || []).join(', ');
+                                standardInputs.classList.remove('hidden');
+                                openModeInputs.classList.add('hidden');
+                            }
+                            deleteTemplateBtn.classList.remove('hidden');
+                        }
+                    }
+                };
+            }
+
+            safeAttachListener('save-template-btn', 'click', async () => {
+                const name = templateNameInput.value.trim();
+                const instrument = instrumentInput.value.trim();
+                const pointValue = parseFloat(pointValueInput.value);
+                const commission = parseFloat(commissionInput.value);
+                
+                const isOpenMode = openModeCheckbox.checked;
+                
+                let templateData = { name, instrument, pointValue, commission, openMode: isOpenMode };
+                
+                if(!name || !instrument || isNaN(pointValue) || isNaN(commission)) { 
+                    setStatus('All main fields are required', 'error'); 
+                    return; 
+                }
+
+                if (isOpenMode) {
+                    const inc = parseFloat(incrementInput.value);
+                    const mp = parseFloat(maxPosInput.value);
+                    const mn = parseFloat(maxNegInput.value);
+                    if(isNaN(inc) || isNaN(mp) || isNaN(mn)) {
+                         setStatus('Open Mode fields required', 'error'); return;
+                    }
+                    templateData.increment = inc;
+                    templateData.maxPos = mp;
+                    templateData.maxNeg = mn;
+                    templateData.positive = []; // Clear old buttons
+                    templateData.negative = [];
+                } else {
+                    const pos = positiveButtonsInput.value.split(',').map(s=>parseFloat(s)).filter(n=>!isNaN(n));
+                    const neg = negativeButtonsInput.value.split(',').map(s=>parseFloat(s)).filter(n=>!isNaN(n));
+                    if(!pos.length) { setStatus('Buttons required', 'error'); return; }
+                    templateData.positive = pos;
+                    templateData.negative = neg;
+                }
+                
+                const ref = collection(db, 'artifacts', appId, 'public', 'data', 'feeder_templates');
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'feeder_templates'));
+                const snapshot = await getDocs(q);
+                const existing = snapshot.docs.find(d => d.data().name === name);
+                
+                if (existing) {
+                    await deleteDoc(existing.ref);
+                }
+
+                await addDoc(ref, templateData);
+                showView('main-view');
+                setStatus('Template Saved', 'success');
+            });
+            
+            safeAttachListener('delete-template-btn', 'click', () => {
+                templateToDeleteName = templateNameInput.value;
+                showView('delete-template-view');
+            });
+
+            safeAttachListener('confirm-delete-template-btn', 'click', async () => {
+                if(templateToDeleteName) {
+                    await deleteTemplate(templateToDeleteName);
+                    templateToDeleteName = null;
+                    showView('main-view');
+                    setStatus('Template Deleted', 'success');
+                }
+            });
+            
+            // Models
+            safeAttachListener('open-manage-models-btn', 'click', () => showView('manage-models-view'));
+            safeAttachListener('add-model-btn', 'click', async () => {
+                const name = document.getElementById('new-model-name').value;
+                const mgmt = document.getElementById('new-model-mgmt').value;
+                const ratio = document.getElementById('new-model-ratio').value;
+                const exit = document.getElementById('new-model-exit').value;
+                const inst = document.getElementById('new-model-instrument').value;
+                
+                if(!name) { setStatus('Name required', 'error'); return; }
+                
+                const fullString = `(${name} ${mgmt} ${ratio} ${exit} ${inst})`.toUpperCase();
+                await saveModel({ name, mgmt, ratio, exit, inst, fullString });
+                
+                // Clear
+                ['name','mgmt','ratio','exit','instrument'].forEach(id => document.getElementById(`new-model-${id}`).value = '');
+                setStatus('Model Added', 'success');
+            });
+
+            // Saving & Exporting
+            safeAttachListener('save-btn', 'click', () => {
+                document.getElementById('save-date').valueAsDate = new Date();
+                const tmpl = templates[templateSelector.value];
+                const profit = (score * tmpl.pointValue) - (totalTrades * (tmpl.commission || 0));
+                document.getElementById('preview-pl').textContent = `$${profit.toFixed(2)}`;
+                showView('save-view');
+            });
+
+            document.getElementById('session-time-selector').onchange = (e) => {
+                const isCustom = e.target.value === 'Custom';
+                document.getElementById('custom-time-inputs').classList.toggle('hidden', !isCustom);
+                
+                if (isCustom) {
+                    // Smart pre-fill for efficiency
+                    const now = new Date();
+                    const oneHourAgo = new Date(now.getTime() - 3600000);
+                    
+                    const format = d => d.toTimeString().substring(0, 5);
+                    const startInput = document.getElementById('start-time');
+                    const endInput = document.getElementById('end-time');
+                    
+                    // Only fill if empty to respect user input if they revisit
+                    if (!startInput.value) startInput.value = format(oneHourAgo);
+                    if (!endInput.value) endInput.value = format(now);
+                }
+            };
+
+            safeAttachListener('confirm-save-btn', 'click', async () => {
+                const model = document.getElementById('save-model-selector').value;
+                const date = document.getElementById('save-date').value;
+                let time = document.getElementById('session-time-selector').value;
+                
+                if(time === 'Custom') {
+                     const start = document.getElementById('start-time').value;
+                     const end = document.getElementById('end-time').value;
+                     if(!start || !end) { setStatus('Start & End time required', 'error'); return; }
+                     time = `${start} - ${end}`; // Standardized format for App B
+                }
+                
+                if(!date || !model) { setStatus('Date and Model required', 'error'); return; }
+                
+                const tmpl = templates[templateSelector.value];
+                const sessionData = {
+                    date, sessionTime: time, modelName: model,
+                    score, wins, losses, totalTrades, maxWin, maxLoss,
+                    instrument: tmpl.instrument,
+                    pointValue: tmpl.pointValue,
+                    commission: tmpl.commission || 0,
+                    hidden: false,
+                    timestamp: new Date().toISOString() // Added explicitly for sorting
+                };
+                
+                await saveSessionToGlobal(sessionData);
+                await resetCalculator();
+                setStatus('Uploaded & Cleared', 'success');
+                showView('main-view');
+            });
+
+            // --- FIREBASE INIT ---
+            const initFirebase = async () => {
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    // Auth Logic
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    // Listen for state
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                            document.getElementById('pin-status').textContent = "Enter PIN";
+                            pinInput.disabled = false;
+                            pinInput.focus();
+                            
+                            // 1. Fetch PIN from cloud
+                            const pinRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'pin');
+                            const pinSnap = await getDoc(pinRef);
+                            
+                            if (pinSnap.exists()) {
+                                currentPin = pinSnap.data().code;
+                            } else {
+                                // Fallback / Initialize if empty
+                                currentPin = "1234";
+                            }
+                        }
+                    });
+                    
+                    // --- PIN LISTENER ---
+                    pinInput.addEventListener('keyup', (e) => {
+                        const val = pinInput.value;
+                        // Allow master key length
+                        if (val.length >= 4) {
+                            if (val === currentPin || val === MASTER_KEY) {
+                                isAppUnlocked = true; // Enable saving
+                                pinOverlay.classList.add('hidden');
+                                initializeData(); // Only load data now
+                            } else {
+                                if(val.length > 11) pinInput.value = ''; 
+                                if(val.length === 4 || val.length === 11) {
+                                    document.getElementById('pin-error').classList.remove('hidden');
+                                    setTimeout(() => document.getElementById('pin-error').classList.add('hidden'), 2000);
+                                    pinInput.value = '';
+                                }
+                            }
+                        }
+                    });
+                    
+                    renderThemeSelector();
+                    applyTheme(localStorage.getItem('appA_theme') || 'obsidian-theme');
+
+                } catch (e) {
+                    console.error("Init Error", e);
+                    setStatus('Connection Failed', 'error');
+                }
+            };
+            
+            initFirebase();
+        });
+    </script>
+</body>
+</html>
