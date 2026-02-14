@@ -62,7 +62,6 @@
 
         /* --- OPEN MODE STYLES --- */
         .open-mode-container { display: flex; height: 100%; width: 100%; justify-content: space-between; align-items: center; position: relative; touch-action: none; }
-        /* Fix: Force hide when class is present to override display:flex */
         .open-mode-container.hidden { display: none !important; }
         
         .dial-track-container { width: 80px; height: 280px; position: relative; display: flex; justify-content: center; border-radius: 999px; background: rgba(0,0,0,0.2); overflow: visible; }
@@ -80,7 +79,6 @@
         .score-pulse-anim { animation: score-pulse 0.5s ease-out; }
 
         /* --- Themes (Reduced List) --- */
-        
         /* Sunrise Theme */
         .sunrise-theme { background: linear-gradient(to top, #D8B4FE, #FDE68A); color: #422006; font-family: 'Lato', sans-serif; }
         .sunrise-theme .main-container { background-color: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); }
@@ -363,7 +361,7 @@
             <div class="flex justify-between items-center mb-4 flex-shrink-0">
                 <h3 class="text-xl font-bold">Edit Templates</h3>
                 <button type="button" class="icon-btn close-view-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
                 </button>
             </div>
             <div class="space-y-4 overflow-y-auto -mr-4 pr-4">
@@ -452,7 +450,7 @@
                 </div>
 
                 <div><label for="save-date" class="text-sm font-medium">Date</label><input type="date" id="save-date" class="form-input"></div>
-                <div><label class="text-sm font-medium">Session Time</label><select id="session-time-selector" class="form-input"><option value="London (02:00 - 06:00)">London (02:00 - 06:00)</option><option value="Early (08:30 - 12:30)">Early (08:30 - 12:30)</option><option value="Late (12:30 - 15:00)">Late (12:30 - 15:00)</option><option value="Custom">Custom</option></select></div>
+                <div><label class="text-sm font-medium">Session Time</label><select id="session-time-selector" class="form-input"><option value="8:30 - 12:30">8:30 - 12:30</option><option value="9:00 - 12:30">9:00 - 12:30</option><option value="9:30-12:30">9:30-12:30</option><option value="12:30-14:50">12:30-14:50</option><option value="Custom">Custom</option></select></div>
                 <div id="custom-time-inputs" class="hidden grid grid-cols-2 gap-2"><div><label for="start-time" class="text-xs">Start</label><input type="time" id="start-time" class="form-input"></div><div><label for="end-time" class="text-xs">End</label><input type="time" id="end-time" class="form-input"></div></div>
                 
                 <div class="bg-blue-900/20 p-3 rounded text-xs mt-4">
@@ -512,7 +510,7 @@
 
             // --- CONFIG ---
             // NOTE: This uses the environment variable provided by the platform.
-    const firebaseConfig = {
+           const firebaseConfig = {
   apiKey: "AIzaSyBIlEbTnEzkcXJs0sRKOGx0xA5AWOWZdb4",
   authDomain: "tracker2026-330ca.firebaseapp.com",
   projectId: "tracker2026-330ca",
@@ -809,11 +807,11 @@
             };
 
             // --- CORE LOGIC ---
-            const handleButtonClick = async (event, value) => {
+            // Separated state calculation from side effects
+            const calculateState = (value) => {
                 const prev = score;
-                // Precision update: handle float math carefully
                 score = parseFloat((score + value).toFixed(2));
-                history.push({ state: { score: prev, wins, losses, totalTrades }, value });
+                history.push({ state: { score: prev, wins, losses, totalTrades, maxWin, maxLoss }, value });
                 
                 totalTrades++;
                 if (value > 0) wins++;
@@ -825,6 +823,11 @@
                      maxWin = Math.max(maxWin, profit);
                      maxLoss = Math.min(maxLoss, profit);
                 }
+            };
+
+            const handleButtonClick = async (event, value) => {
+                const prev = score;
+                calculateState(value);
 
                 // Animation
                 const currentTheme = localStorage.getItem('appA_theme');
@@ -835,7 +838,6 @@
                     mainContainer.style.setProperty('--anim-color', color);
                     mainContainer.style.setProperty('--anim-color-transparent', color + '00');
                     
-                    // Trigger pulse
                     mainContainer.classList.remove('border-pulse-anim');
                     void mainContainer.offsetWidth; // Trigger reflow
                     mainContainer.classList.add('border-pulse-anim');
@@ -1077,10 +1079,18 @@
 
             safeAttachListener('update-calc-btn', 'click', async (e) => {
                 const values = document.getElementById('calc-input').value.trim().split(' ').map(Number).filter(n => !isNaN(n)); 
-                await resetCalculator(); 
+                
+                // 1. Reset State Explicitly (Silently)
+                score = 0.00; wins = 0; losses = 0; totalTrades = 0; maxWin = 0; maxLoss = 0; history = [];
+                
+                // 2. Replay History Logic Only
                 for (const val of values) {
-                    await handleButtonClick(e, val);
+                    calculateState(val);
                 }
+                
+                // 3. One-time Update & Save
+                updateDisplay(0); 
+                await autoSaveSession(); 
                 showView('main-view'); 
             });
 
@@ -1103,7 +1113,21 @@
             const maxNegInput = document.getElementById('max-neg-input');
 
             templateSelector.onchange = (e) => renderButtons(e.target.value);
-            safeAttachListener('edit-templates-btn', 'click', () => showView('edit-templates-view'));
+            safeAttachListener('edit-templates-btn', 'click', () => {
+                // Ensure correct state when opening the editor for a new template
+                templateEditSelector.value = "";
+                templateNameInput.value = "";
+                instrumentInput.value = "ES";
+                pointValueInput.value = "50";
+                commissionInput.value = "1.24";
+                positiveButtonsInput.value = "";
+                negativeButtonsInput.value = "";
+                openModeCheckbox.checked = false;
+                standardInputs.classList.remove('hidden');
+                openModeInputs.classList.add('hidden');
+                deleteTemplateBtn.classList.add('hidden');
+                showView('edit-templates-view');
+            });
             
             // Toggle Input Visibility based on Checkbox
             if(openModeCheckbox) {
@@ -1257,22 +1281,7 @@
             });
 
             document.getElementById('session-time-selector').onchange = (e) => {
-                const isCustom = e.target.value === 'Custom';
-                document.getElementById('custom-time-inputs').classList.toggle('hidden', !isCustom);
-                
-                if (isCustom) {
-                    // Smart pre-fill for efficiency
-                    const now = new Date();
-                    const oneHourAgo = new Date(now.getTime() - 3600000);
-                    
-                    const format = d => d.toTimeString().substring(0, 5);
-                    const startInput = document.getElementById('start-time');
-                    const endInput = document.getElementById('end-time');
-                    
-                    // Only fill if empty to respect user input if they revisit
-                    if (!startInput.value) startInput.value = format(oneHourAgo);
-                    if (!endInput.value) endInput.value = format(now);
-                }
+                document.getElementById('custom-time-inputs').classList.toggle('hidden', e.target.value !== 'Custom');
             };
 
             safeAttachListener('confirm-save-btn', 'click', async () => {
@@ -1284,7 +1293,7 @@
                      const start = document.getElementById('start-time').value;
                      const end = document.getElementById('end-time').value;
                      if(!start || !end) { setStatus('Start & End time required', 'error'); return; }
-                     time = `${start} - ${end}`; // Standardized format for App B
+                     time = `${start} - ${end}`;
                 }
                 
                 if(!date || !model) { setStatus('Date and Model required', 'error'); return; }
